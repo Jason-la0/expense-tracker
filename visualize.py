@@ -1,8 +1,8 @@
-"""成員 B：讀取 CSV，依分類加總金額並輸出圓餅圖。"""
+"""成員 B：配合 A 的 note 欄位與自訂分類，輸出分類支出圓餅圖。"""
 
 import argparse
 import csv
-import re
+import math
 import sys
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -10,52 +10,56 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
-FIELDS = ["date", "amount", "category", "notes"]
-CATEGORIES = ["飲食", "交通", "購物", "娛樂", "生活", "其他"]
+FIELDS = ["date", "amount", "category", "note"]
+LEGACY_FIELDS = ["date", "amount", "category", "notes"]
+CATEGORY_COLORS = {
+    "飲食": "#4C78A8", "交通": "#F2A541", "購物": "#59A14F",
+    "娛樂": "#B279A2", "生活": "#E87878", "其他": "#72B7B2",
+}
 
 
 def load_totals(csv_path):
     """驗證每筆資料後加總；有錯誤就停止，避免畫出不完整的統計。"""
-    totals = {category: Decimal("0.00") for category in CATEGORIES}
+    totals = {}
     count = 0
     with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
-        reader = csv.DictReader(file)
-        if reader.fieldnames != FIELDS:
-            raise ValueError("CSV 第一列必須依序為：date,amount,category,notes")
+        reader = csv.DictReader(file, strict=True)
+        if reader.fieldnames not in (FIELDS, LEGACY_FIELDS):
+            raise ValueError("CSV 第一列必須依序為：date,amount,category,note（舊版 notes 也可讀取）。")
 
         for row in reader:
             line = reader.line_num
             if None in row or any(value is None for value in row.values()):
                 raise ValueError(f"CSV 第 {line} 行的欄位數不正確。")
             date = row["date"].strip()
-            if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", date):
-                raise ValueError(f"CSV 第 {line} 行：日期須使用 YYYY-MM-DD。")
             try:
+                # 與 A 使用相同日期解析方式，接受其驗證通過的日期。
                 datetime.strptime(date, "%Y-%m-%d")
             except ValueError as error:
-                raise ValueError(f"CSV 第 {line} 行：日期不存在。") from error
+                raise ValueError(f"CSV 第 {line} 行：請使用有效的 YYYY-MM-DD 日期。") from error
 
             amount_text = row["amount"].strip()
-            if not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", amount_text):
-                raise ValueError(f"CSV 第 {line} 行：金額須為正數，最多兩位小數。")
             try:
                 amount = Decimal(amount_text)
-                # 以整數分驗證，避免極端金額在加總或繪圖時溢位。
-                if not Decimal("0") < amount <= Decimal("999999999999.99"):
-                    raise ValueError(f"CSV 第 {line} 行：金額須大於 0 且不超過 999999999999.99。")
+                # A 以 float 存檔，可能有多位小數或科學記號；這裡不限制兩位小數。
+                # 拒絕 inf、NaN 等無法形成有效圓餅圖的數值。
+                if not amount.is_finite() or amount <= 0:
+                    raise ValueError(f"CSV 第 {line} 行：金額必須是大於 0 的有限數值。")
+                if not math.isfinite(float(amount)) or float(amount) == 0:
+                    raise ValueError(f"CSV 第 {line} 行：金額超出可繪圖的數值範圍。")
             except InvalidOperation as error:
                 raise ValueError(f"CSV 第 {line} 行：金額無效。") from error
 
             category = row["category"].strip()
-            if category not in CATEGORIES:
-                raise ValueError(f"CSV 第 {line} 行：分類須為「{'、'.join(CATEGORIES)}」其中之一。")
+            if not category:
+                raise ValueError(f"CSV 第 {line} 行：分類不可空白。")
 
-            totals[category] += amount
+            totals[category] = totals.get(category, Decimal("0.00")) + amount
             count += 1
 
     if count == 0:
         raise ValueError("目前沒有支出資料，請先執行 A 的輸入程式新增支出。")
-    return {name: value for name, value in totals.items() if value > 0}, count
+    return totals, count
 
 
 def configure_font(plt, font_manager):
@@ -86,14 +90,15 @@ def draw_chart(totals, count, output_path, show=True):
 
     configure_font(plt, font_manager)
     labels = list(totals)
-    values = [float(totals[label]) for label in labels]
     total = sum(totals.values(), Decimal("0.00"))
-    palette = dict(zip(CATEGORIES, ["#4C78A8", "#F2A541", "#59A14F", "#B279A2", "#E87878", "#72B7B2"]))
+    # 先轉成比例，避免 matplotlib 內部轉換較大金額時溢位。
+    values = [float(totals[label] / total) for label in labels]
+    colors = [CATEGORY_COLORS.get(label, plt.get_cmap("tab20")(i % 20)) for i, label in enumerate(labels)]
 
-    fig, ax = plt.subplots(figsize=(10, 6), facecolor="white")
+    fig, ax = plt.subplots(figsize=(10, max(6, len(labels) * 0.35 + 2)), facecolor="white")
     wedges, _, _ = ax.pie(
         values, labels=labels, autopct="%1.1f%%", startangle=90,
-        colors=[palette[label] for label in labels],
+        colors=colors,
         pctdistance=0.70, labeldistance=1.08,
         wedgeprops={"edgecolor": "white", "linewidth": 2},
         textprops={"fontsize": 11},
@@ -120,7 +125,7 @@ def draw_chart(totals, count, output_path, show=True):
 def main():
     parser = argparse.ArgumentParser(description="成員 B：讀取支出 CSV，產生分類圓餅圖。")
     parser.add_argument("--data", type=Path, default=BASE_DIR / "expenses.csv", help="資料檔案（預設為程式旁的 expenses.csv）")
-    parser.add_argument("--output", type=Path, default=BASE_DIR / "screenshots" / "piechart.png", help="輸出 PNG 路徑")
+    parser.add_argument("--output", type=Path, default=BASE_DIR / "sample_pie_chart.png", help="輸出 PNG 路徑（預設 sample_pie_chart.png）")
     parser.add_argument("--no-show", action="store_true", help="只儲存圖片，不開啟視窗")
     args = parser.parse_args()
 

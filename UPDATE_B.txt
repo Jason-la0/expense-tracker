@@ -1,0 +1,25 @@
+B 部分更新步驟（你已上傳舊版，不必重建分支）
+
+1. 解壓縮本套件，進入包含 visualize.py 的資料夾。
+2. 在這一層開 CMD，執行：
+   py -m pip install -r requirements.txt
+   py visualize.py --data sample_expenses.csv
+3. 正確結果是兩筆、總額 170 元（飲食 120 元、交通 50 元），圖片為 sample_pie_chart.png。
+4. 請 A 給你實際的 expenses.csv，在同資料夾執行 py visualize.py，確認整合正常。
+5. 在 GitHub 切到你原本的「1132960許峻瑋」分支，用 Add file → Upload files 更新 visualize.py，提交說明：
+   修正 CSV 備註欄位相容與自訂分類統計
+6. 再上傳 README_B.md、sample_expenses.csv、sample_pie_chart.png，並在需要時更新 requirements.txt（內容統一為 matplotlib），提交說明：
+   更新與 A 整合的測試資料、圖表與操作說明
+7. 上傳的是解壓縮後的檔案，不是整份 ZIP，也不要包多一層 B_expense_visualization 資料夾。
+8. README_B.md 的操作說明與圖片引用仍需合併進小組 README.md，保留 A 的說明。
+9. 不必把 A 實際記帳用的 expenses.csv 放進這次提交；sample_expenses.csv 才是提供測試的範例。
+10. 告訴 A：合併時使用你的實際分支名稱，不是照抄 feature-piechart。分支合併圖與展示影片仍需共同完成。
+
+主要變更：
+- CSV 新格式使用 note（單數），同時相容舊 notes。
+- 支援 A 自行輸入分類，取消舊版固定六種分類的限制。
+- 支援 A 正數浮點數的存檔格式，不再限制最多兩位小數。
+- 預設圖片改為程式旁的 sample_pie_chart.png，與 A 的教學一致。
+- 新版範例是 170 元，原版範例的 600 元不適用於這份新版測試資料。
+
+本套件更新了本機可下載的檔案；尚未替你操作 GitHub 上傳、合併或繳交。
